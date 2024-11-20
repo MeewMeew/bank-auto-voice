@@ -1,0 +1,76 @@
+name: Rust
+
+on:
+  push:
+    branches: ["main"]
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    environment:
+      name: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          $version = Select-String -Path "Cargo.toml" -Pattern '^version' | ForEach-Object { $_.Line -replace '^version = "', '' -replace '"', '' }
+          Write-Output "version=$version" >> $env:GITHUB_ENV
+          echo "::set-output name=version::$version"
+
+      - name: Build the project
+        run: cargo build --release --verbose
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BankAutoVoice-${{ steps.get_version.outputs.version }}
+          path: target/x86_64-pc-windows-msvc/release/BankAutoVoice.exe
+
+      - name: Build the Innosetup installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.5
+        with:
+          path: res/setup.iss
+
+      - name: Archive installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: BankAutoVoiceInstaller-${{ steps.get_version.outputs.version }}
+          path: |
+            build/BankAutoVoice-Installer.exe
+            bin
+
+  release:
+    runs-on: windows-latest
+    needs: build
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from build
+        run: echo "VERSION=${{ needs.build.outputs.version }}"
+
+      - name: Create GitHub release
+        run: |
+          gh release create "v${{ needs.build.outputs.version }}" \
+            build/BankAutoVoice-Installer.exe \
+            --title "Release v${{ needs.build.outputs.version }}" \
+            --notes "This release contains BankAutoVoice Installer version ${{ needs.build.outputs.version }}."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
