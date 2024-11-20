@@ -48,9 +48,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BankAutoVoiceInstaller-${{ steps.get_version.outputs.version }}
-          path: |
-            build/BankAutoVoice-Installer.exe
-            bin
+          path: build/BankAutoVoice-Installer.exe
 
   release:
     runs-on: windows-latest
@@ -65,10 +63,18 @@ jobs:
       - name: Get version from build
         run: echo "VERSION=${{ needs.build.outputs.version }}"
 
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: BankAutoVoiceInstaller-${{ needs.build.outputs.version }}
+
+      - name: Print list of files
+        run: ls
+
       - name: Create GitHub release
         run: |
           gh release create "v${{ needs.build.outputs.version }}" \
-            build/BankAutoVoice-Installer.exe \
+            BankAutoVoice-Installer.exe \
             --title "Release v${{ needs.build.outputs.version }}" \
             --notes "This release contains BankAutoVoice Installer version ${{ needs.build.outputs.version }}."
         env:
