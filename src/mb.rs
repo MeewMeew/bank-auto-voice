@@ -1,10 +1,12 @@
 #![allow(dead_code, non_snake_case)]
-use anyhow::{Context, Result};
+use super::config::Config;
+use anyhow::Result;
 use chrono::prelude::*;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use std::env;
+
+static mut CONFIG: Config = Config::new();
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct Record {
@@ -53,20 +55,11 @@ pub struct MB {
 
 impl MB {
   pub fn new() -> Self {
+    unsafe {
+      CONFIG = Config::read().unwrap();
+    }
     MB {
-      transaction: TransactionResponse {
-        error: 0,
-        message: String::from("success"),
-        data: Transaction {
-          page: 0,
-          pageSize: 0,
-          nextPage: 0,
-          prevPage: 0,
-          totalPages: 0,
-          totalRecords: 0,
-          records: Vec::new(),
-        },
-      },
+      transaction: TransactionResponse::default(),
       latest_transaction: Record::default(),
     }
   }
@@ -74,43 +67,59 @@ impl MB {
   pub fn fetch_transaction(&mut self) -> Result<()> {
     let client = Client::new();
     let mut headers = HeaderMap::new();
-    let apikey = env::var("API_KEY").unwrap_or_else(|_| "nah".to_string());
 
-    headers.insert(
-      "Authorization",
-      HeaderValue::from_str(&format!("Apikey {}", apikey))?,
-    );
+    unsafe {
+      headers.insert(
+        "Authorization",
+        HeaderValue::from_str(&format!("Apikey {}", CONFIG.apikey))?,
+      );
+    }
 
     let api_url = format!(
       "https://oauth.casso.vn/v2/transactions?fromDate={}&page=1&pageSize=5&sort=DESC",
       Utc::now().format("%Y-%m-%d").to_string()
     );
 
-    let response = client
-      .get(&api_url)
-      .headers(headers)
-      .send()
-      .context("Failed to send request")?;
+    let response = client.get(&api_url).headers(headers).send()?;
 
     if response.status().is_success() {
       let json = match response.json::<TransactionResponse>() {
         Ok(data) => data,
         Err(e) => {
-          eprintln!("Failed to parse response as JSON: {}", e);
-          return Err(anyhow::anyhow!("Failed to parse JSON response").into());
+          unsafe {
+            if CONFIG.debug {
+              eprintln!(" [!] Failed to parse JSON response: {}", e);
+            }
+          }
+          return Err(anyhow::anyhow!(" [!] Failed to parse JSON response").into());
         }
       };
       self.transaction = json;
+    } else {
+      unsafe {
+        if CONFIG.debug {
+          eprintln!(" [!] Failed to fetch transaction: {}", response.status());
+        }
+      }
     }
     Ok(())
   }
 
   pub fn compare_transaction(&mut self) -> Result<bool> {
     let latest_transaction = self.latest_transaction.clone();
-    let next_transaction = self.transaction.data.records.first().unwrap().clone();
+    let next_transaction = if self.transaction.data.records.len() > 0 {
+      self.transaction.data.records.first().unwrap().clone()
+    } else {
+      Record::default()
+    };
 
     if latest_transaction.id != 0 && latest_transaction.id < next_transaction.id {
       self.latest_transaction = next_transaction;
+      unsafe {
+        if CONFIG.debug {
+          println!(" [+] New transaction detected");
+        }
+      }
       Ok(true)
     } else {
       self.latest_transaction = next_transaction;

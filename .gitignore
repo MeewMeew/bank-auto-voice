@@ -3,3 +3,4 @@
 .env
 BankVoice.exe
 ./build
+config.json
