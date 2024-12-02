@@ -37,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BankAutoVoice-${{ steps.get_version.outputs.version }}
-          path: target/x86_64-pc-windows-msvc/release/BankAutoVoice.exe
+          path: target/release/BankAutoVoice.exe
 
       - name: Build the Innosetup installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.5

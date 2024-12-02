@@ -1,5 +1,5 @@
 #![allow(dead_code, non_snake_case)]
-use super::config::Config;
+use super::{config::Config, logger::Logger};
 use anyhow::Result;
 use chrono::prelude::*;
 use reqwest::blocking::Client;
@@ -7,6 +7,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 
 static mut CONFIG: Config = Config::new();
+static LOGGER: Logger = Logger::new();
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct Record {
@@ -69,6 +70,12 @@ impl MB {
     let mut headers = HeaderMap::new();
 
     unsafe {
+      if CONFIG.apikey.is_empty() {
+        return Err(anyhow::anyhow!("You need to set API key first").into());
+      }
+    }
+
+    unsafe {
       headers.insert(
         "Authorization",
         HeaderValue::from_str(&format!("Apikey {}", CONFIG.apikey))?,
@@ -88,7 +95,7 @@ impl MB {
         Err(e) => {
           unsafe {
             if CONFIG.debug {
-              eprintln!(" [!] Failed to parse JSON response: {}", e);
+              LOGGER.error(format!("Failed to parse JSON response: {}", e).as_str());
             }
           }
           return Err(anyhow::anyhow!(" [!] Failed to parse JSON response").into());
@@ -98,7 +105,7 @@ impl MB {
     } else {
       unsafe {
         if CONFIG.debug {
-          eprintln!(" [!] Failed to fetch transaction: {}", response.status());
+          LOGGER.error(format!("Failed to fetch transaction: {}", response.status()).as_str());
         }
       }
     }
@@ -115,11 +122,6 @@ impl MB {
 
     if latest_transaction.id != 0 && latest_transaction.id < next_transaction.id {
       self.latest_transaction = next_transaction;
-      unsafe {
-        if CONFIG.debug {
-          println!(" [+] New transaction detected");
-        }
-      }
       Ok(true)
     } else {
       self.latest_transaction = next_transaction;

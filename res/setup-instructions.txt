@@ -1,3 +1,0 @@
-When you open the application for the first time, please paste your Casso APIKEY into the Command Prompt window and press Enter. 
-After that, restart the application to complete the setup. 
-Once done, you're all set to enjoy the features of the app!

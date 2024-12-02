@@ -2,9 +2,10 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
-use super::config::Config;
+use super::{config::Config, logger::Logger};
 
 static mut CONFIG: Config = Config::new();
+static LOGGER: Logger = Logger::new();
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 pub struct Menu {}
@@ -24,72 +25,87 @@ impl Menu {
   }
 
   fn print_credit(&self) {
-    println!(" [+] Welcome to the program");
-    println!(" [+] This program will monitor your MBBank account and notify you when a new transaction is detected");
+    self.clear_screen();
+    println!("{}", "-".repeat(30));
     println!();
-    println!(" [CREDITS] Made by @mewthedev");
+    LOGGER.info("MBBank Transaction Monitor");
+    LOGGER.info(
+      r#"This program will monitor
+     your MBBank account and 
+     notify you when a new 
+     transaction is detected    
+    "#,
+    );
+    LOGGER.info(format!("Author: {}", LOGGER.cyan("@mewthedev")).as_str());
     println!();
     println!("{}", "-".repeat(30));
   }
 
   fn print_menu(&self) {
-    self.clear_screen();
     self.print_credit();
-    println!(" [+] Choose an option:");
+    LOGGER.info("Choose an option:");
     println!("{}", "-".repeat(30));
-    println!(" [1] Start monitoring");
-    println!(" [2] Configure");
+    LOGGER.option("1", "Start monitoring");
+    LOGGER.option("2", "Configure");
+    LOGGER.option("0", "Exit program");
     println!("{}", "-".repeat(30));
-    println!(" [0] Exit program");
-    println!("{}", "-".repeat(30));
-    print!(" [+] Your choice: ");
+    LOGGER.prompt("Your choice: ");
   }
 
   fn print_configure(&self) {
-    self.clear_screen();
     self.print_credit();
-    println!(" [+] Choose an option:");
+    LOGGER.info("Choose an option:");
     println!("{}", "-".repeat(30));
-    println!(" [1] Set API key ({})", unsafe {
-      if CONFIG.apikey.is_empty() {
-        "not set"
-      } else {
-        "set"
-      }
-    });
-    println!(" [2] Set refresh interval ({} seconds)", unsafe {
-      CONFIG.refresh_interval
-    });
-    println!(" [3] Toggle debug mode ({})", unsafe {
-      if CONFIG.debug {
-        "enabled"
-      } else {
-        "disabled"
-      }
-    });
+    LOGGER.option(
+      "1",
+      format!("Set API key ({})", unsafe {
+        if CONFIG.apikey.is_empty() {
+          "not set"
+        } else {
+          "set"
+        }
+      })
+      .as_str(),
+    );
+    LOGGER.option(
+      "2",
+      format!("Set refresh interval ({})", unsafe {
+        CONFIG.refresh_interval
+      })
+      .as_str(),
+    );
+    LOGGER.option(
+      "3",
+      format!("Toggle debug mode ({})", unsafe {
+        if CONFIG.debug {
+          "enabled"
+        } else {
+          "disabled"
+        }
+      })
+      .as_str(),
+    );
+    LOGGER.option("0", "Back to main menu");
     println!("{}", "-".repeat(30));
-    println!(" [0] Back to main menu");
-    println!("{}", "-".repeat(30));
-    print!(" [+] Your choice: ");
+    LOGGER.prompt("Your choice: ");
   }
 
   fn set_api_key(&self) -> Result<()> {
-    self.clear_screen();
     self.print_credit();
     loop {
-      print!(" [+] Please enter your API key: ");
+      LOGGER.prompt("Enter your API key: ");
       std::io::stdout().flush().unwrap();
       let mut apikey_string = String::new();
       std::io::stdin().read_line(&mut apikey_string)?;
       let apikey_string = apikey_string.trim();
       if apikey_string.is_empty() {
-        println!(" [!] API key cannot be empty");
+        LOGGER.warn("API key cannot be empty");
       } else {
         unsafe {
           CONFIG.set_apikey(apikey_string);
           CONFIG.write()?;
         }
-        println!(" [+] API key saved");
+        LOGGER.done("API key saved");
         break;
       }
     }
@@ -97,20 +113,23 @@ impl Menu {
   }
 
   fn set_refresh_interval(&self) -> Result<()> {
-    self.clear_screen();
     self.print_credit();
     let mut interval: u16;
     loop {
-      print!(" [+] Please enter the refresh interval (in seconds): ");
+      LOGGER.prompt("Enter refresh interval (in seconds): ");
       std::io::stdout().flush().unwrap();
       let mut interval_string = String::new();
       std::io::stdin().read_line(&mut interval_string)?;
       let interval_string = interval_string.trim();
-      interval = interval_string
-        .parse::<u16>()
-        .expect(" [!] Invalid interval");
+      interval = interval_string.parse::<u16>().expect(
+        format!(
+          "[{}] Invalid interval",
+          LOGGER.blue(LOGGER.red("ERROR").as_str())
+        )
+        .as_str(),
+      );
       if interval < 1 {
-        println!(" [!] Interval must be at least 1 second");
+        LOGGER.warn("Interval must be at least 1 second");
       } else {
         break;
       }
@@ -120,19 +139,21 @@ impl Menu {
       CONFIG.set_refresh_interval(interval);
       CONFIG.write()?;
     }
-    println!(" [+] Refresh interval saved");
+    LOGGER.done("Refresh interval saved");
     Ok(())
   }
 
   fn toggle_debug(&self) -> Result<()> {
-    self.clear_screen();
     self.print_credit();
     unsafe {
       CONFIG.toggle_debug();
       CONFIG.write()?;
-      println!(
-        " [+] Debug mode {}",
-        if CONFIG.debug { "enabled" } else { "disabled" }
+      LOGGER.done(
+        format!(
+          "Debug mode {}",
+          if CONFIG.debug { "enabled" } else { "disabled" }
+        )
+        .as_str(),
       );
     }
     Ok(())
@@ -154,16 +175,18 @@ impl Menu {
 
       match option {
         "0" => {
-          self.clear_screen();
-          println!(" [-] Exiting program");
+          self.print_credit();
+          LOGGER.info("Exiting program");
+          LOGGER.info("Goodbye!");
           std::process::exit(0);
         }
         "1" => {
-          println!(" [+] Starting monitoring");
+          self.print_credit();
+          LOGGER.info("Monitoring started");
+          LOGGER.info("Press Ctrl+C to stop monitoring");
           break;
         }
         "2" => loop {
-          self.clear_screen();
           self.print_configure();
           std::io::stdout().flush().unwrap();
           let mut setting_option = String::new();
@@ -171,45 +194,42 @@ impl Menu {
           let setting_option = setting_option.trim();
           match setting_option {
             "0" => {
-              self.clear_screen();
               self.print_menu();
               break;
             }
             "1" => {
-              self.clear_screen();
+              self.print_credit();
               self.set_api_key().unwrap();
-              println!(" [!] Enter to back to main menu");
+              LOGGER.info("Enter to back to main menu");
               self.wait_for_enter();
               self.print_configure();
             }
             "2" => {
-              self.clear_screen();
+              self.print_credit();
               self.set_refresh_interval().unwrap();
-              println!(" [!] Enter to back to main menu");
+              LOGGER.info("Enter to back to main menu");
               self.wait_for_enter();
               self.print_configure();
             }
             "3" => {
-              self.clear_screen();
+              self.print_credit();
               self.toggle_debug().unwrap();
-              println!(" [!] Enter to back to main menu");
+              LOGGER.info("Enter to back to main menu");
               self.wait_for_enter();
               self.print_configure();
             }
             _ => {
-              self.clear_screen();
               self.print_credit();
-              println!(" [!] Invalid option");
-              println!(" [!] Press enter to retry");
+              LOGGER.error("Invalid option");
+              LOGGER.info("Press enter to retry");
               self.wait_for_enter();
             }
           }
         },
         _ => {
-          self.clear_screen();
           self.print_credit();
-          println!(" [!] Invalid option");
-          println!(" [!] Press enter to retry");
+          LOGGER.error("Invalid option");
+          LOGGER.info("Press enter to retry");
           self.wait_for_enter();
         }
       }
